@@ -105,22 +105,11 @@
     </div>
 
     <script>
-        // --- 1. INITIALIZE MAIN SITE PLAN ---
-        const viewer = OpenSeadragon({
-            id: "viewer",
-            prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
-            clickToZoom: false, // Prevents canvas jumping when clicking markers
-            tileSources: {
-                type: 'image',
-                url: 'bc-siteplan.jpg' // Base site plan image
-            }
-        });
-
         // Global variables for deep zoom scans
         let scanViewer = null;
         let activeDziPath = "";
 
-        // --- 2. ANNOTATION DATABASE (FOR HIGH-RES SCANS) ---
+        // --- 1. ANNOTATION DATABASE (FOR HIGH-RES SCANS) ---
         const scanAnnotations = [
             {
                 parentScan: "NorthGallery_WestPart_tiled.dzi",
@@ -160,7 +149,17 @@
             }
         ];
 
-        // --- 3. POPULATE MAIN SITE PLAN MARKERS ---
+        // --- 2. INITIALIZE MAIN SITE PLAN ---
+        // Instantiating OpenSeadragon *without* immediate tileSources to bind handlers safely
+        const viewer = OpenSeadragon({
+            id: "viewer",
+            prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
+            clickToZoom: false,
+            // Use standard performance rendering
+            useCanvas: true
+        });
+
+        // Add the 'open' handler BEFORE loading the image source to ensure execution
         viewer.addHandler('open', function() {
             const galleryTags = [
                 {
@@ -217,7 +216,7 @@
                 popup.innerHTML = tag.info;
                 marker.appendChild(popup);
 
-                // Stop OSD click-drag behaviors from leaking into popup elements
+                // Safe event bubbling suppression 
                 const stopBubbling = e => e.stopPropagation();
                 ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup'].forEach(evt => {
                     popup.addEventListener(evt, stopBubbling);
@@ -225,19 +224,26 @@
 
                 viewer.addOverlay({
                     element: marker,
-                    location: new OpenSeadragon.Point(tag.x, tag.y)
+                    location: new OpenSeadragon.Point(tag.x, tag.y),
+                    placement: OpenSeadragon.Placement.CENTER
                 });
 
                 new OpenSeadragon.MouseTracker({
                     element: marker,
                     clickHandler: function() {
-                        document.querySelectorAll('.annotation-marker').forEach(m => {
+                        document.querySelectorAll('#viewer .annotation-marker').forEach(m => {
                             if (m !== marker) m.classList.remove('open');
                         });
                         marker.classList.toggle('open');
                     }
                 });
             });
+        });
+
+        // Now fire the source loading safe in the knowledge handlers are registered!
+        viewer.open({
+            type: 'image',
+            url: 'bc-siteplan.jpg'
         });
 
         // Site plan coordinate helper
@@ -248,14 +254,14 @@
             }
         });
 
-        // --- 4. HIGH-RES SCAN VIEWER INITIALIZATION & LOADING ---
+        // --- 3. HIGH-RES SCAN VIEWER INITIALIZATION & LOADING ---
         function initScanViewer() {
             scanViewer = OpenSeadragon({
                 id: "openseadragon-viewer",
                 prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
                 showNavigator: true,
                 navigatorPosition: "BOTTOM_RIGHT",
-                clickToZoom: false // Keep off so pin interactions don't auto-zoom the canvas
+                clickToZoom: false
             });
 
             // Coordinate Helper for high-res scans (Logs to Console)
@@ -268,7 +274,7 @@
 
             // Inject markers whenever a new scan finishes opening
             scanViewer.addHandler('open', function() {
-                scanViewer.clearOverlays(); // Wipe out previous scan elements so we don't pile up ghosts
+                scanViewer.clearOverlays(); // Wipe previous overlay pins
 
                 const activeAnnotations = scanAnnotations.filter(ann => ann.parentScan === activeDziPath);
                 
@@ -307,7 +313,8 @@
 
                     scanViewer.addOverlay({
                         element: pin,
-                        location: new OpenSeadragon.Point(ann.x, ann.y)
+                        location: new OpenSeadragon.Point(ann.x, ann.y),
+                        placement: OpenSeadragon.Placement.CENTER
                     });
 
                     new OpenSeadragon.MouseTracker({
@@ -324,7 +331,7 @@
         }
 
         function loadRelief(dziPath, title) {
-            // Close any open popups on the site plan before moving
+            // Close any open popups on the site plan before switching panels
             document.querySelectorAll('#viewer .annotation-marker').forEach(m => m.classList.remove('open'));
 
             // Show scan container, hide main map
@@ -339,7 +346,10 @@
                 initScanViewer();
             }
 
-            scanViewer.open(dziPath);
+            // Explicitly define the tileSource object for deep zoom structure
+            scanViewer.open({
+                tileSource: dziPath
+            });
             console.log("Loading scan: " + title);
         }
 
