@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>banteay Chhmar Bas-Reliefs</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/openseadragon.min.js"></script>
+    <style>
+        body { margin: 0; background: #111; color: white; font-family: sans-serif; }
+        #viewer { width: 100vw; height: 100vh; background: #000; }
+        
+        /* Interactive marker pins on the Site Plan */
+        .annotation-marker {
+            background: rgba(230, 126, 34, 0.9); /* Archaeological orange */
+            border: 2px solid white;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            cursor: pointer;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            text-align: center;
+            line-height: 28px;
+            position: relative;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        
+        .annotation-marker .popup-info {
+            display: none;
+            position: absolute;
+            bottom: 36px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid #444;
+            color: white;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 260px;
+            white-space: normal;
+            z-index: 100;
+        }
+
+        .annotation-marker.open .popup-info {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="viewer"></div>
+
+    <script>
+        // Load the main site plan
+        const viewer = OpenSeadragon({
+            id: "viewer",
+            prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
+            clickToZoom: false, // Prevents canvas jumping when clicking markers
+            tileSources: {
+                type: 'image',
+                url: 'bc-siteplan.jpg' // Your base site plan image
+            }
+        });
+
+        viewer.addHandler('open', function() {
+            // Your 7 gallery locations on the site plan
+            const galleryTags = [
+                {
+                    id: "G1",
+                    x: 0.2450, // Coordinates relative to your site_plan.jpg
+                    y: 0.3820,
+                    info: "<strong>Gallery 1: North Elevation</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"gallery_1.dzi\", \"Gallery 1 - North Elevation\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                },
+                {
+                    id: "G2",
+                    x: 0.4120,
+                    y: 0.5100,
+                    info: "<strong>Gallery 2: East Elevation</strong><br>Octagonal brick temple carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"gallery_2.dzi\", \"Gallery 2 - East Elevation\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                }
+                // ... Add G3 through G7 here
+            ];
+
+            galleryTags.forEach(function(tag) {
+                const marker = document.createElement('div');
+                marker.className = 'annotation-marker';
+                marker.innerText = tag.id;
+
+                const popup = document.createElement('div');
+                popup.className = 'popup-info';
+                popup.innerHTML = tag.info;
+                marker.appendChild(popup);
+
+                // Stop OSD from hijacking clicks inside the popup
+                popup.addEventListener('click', function(e) { e.stopPropagation(); });
+                popup.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+                popup.addEventListener('mouseup', function(e) { e.stopPropagation(); });
+                popup.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
+                popup.addEventListener('pointerup', function(e) { e.stopPropagation(); });
+
+                viewer.addOverlay({
+                    element: marker,
+                    location: new OpenSeadragon.Point(tag.x, tag.y)
+                });
+
+                new OpenSeadragon.MouseTracker({
+                    element: marker,
+                    clickHandler: function() {
+                        marker.classList.toggle('open');
+                    }
+                });
+            });
+        });
+
+        // Dynamic Loading Function
+        // When clicked, this clears the site plan and loads the deep zoom bas-relief in the same window!
+        function loadRelief(dziPath, title) {
+            // 1. Clear the site plan overlay markers
+            viewer.clearOverlays();
+            
+            // 2. Load the high-res Deep Zoom Image
+            viewer.open(dziPath);
+            
+            // 3. Optional: You can change the browser title or add a 'Back to Plan' button
+            console.log("Loading " + title);
+        }
+
+        // Click helper for plotting coordinates
+        viewer.addHandler('canvas-click', function(event) {
+            if (event.quick) {
+                const viewportPoint = viewer.viewport.pointFromPixel(event.position);
+                console.log(`Site Plan Coords -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
+            }
+        });
+    </script>
+</body>
+</html>
