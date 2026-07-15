@@ -49,9 +49,9 @@
             transform: translateY(1px);
         }
 
-        /* Interactive marker pins on the Site Plan & Scans */
+        /* Interactive marker pins on the Site Plan */
         .annotation-marker {
-            background: rgba(230, 126, 34, 0.9); /* Archaeological orange */
+            background: rgba(31, 117, 53, 0.8); /* dark green */
             border: 2px solid white;
             border-radius: 50%;
             width: 28px;
@@ -64,6 +64,7 @@
             line-height: 28px;
             position: relative;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            /* Keep bottom-center of the marker pinned to the coordinate */
             transform-origin: center bottom; 
         }
         
@@ -113,10 +114,10 @@
                 url: 'bc-siteplan.jpg' // Your base site plan image
             }
         });
-        
-        // Global variables for deep zoom scans        
+
+        // Global variable to keep track of our active scan viewer instance
         let scanViewer = null;
-        let activeDziPath = "";
+        let activeDziPath = ""; // <-- Track the active DZI string path globally
 
         // --- 2. ANNOTATION DATABASE (FOR HIGH-RES SCANS) ---
         const scanAnnotations = [
@@ -158,8 +159,9 @@
             }
         ];
 
-        // Add the 'open' handler BEFORE loading the image source to ensure execution
+        // --- 3. POPULATE MAIN SITE PLAN MARKERS ---
         viewer.addHandler('open', function() {
+            // Your gallery locations on the site plan
             const galleryTags = [
                 {
                     id: "N1",
@@ -215,7 +217,7 @@
                 popup.innerHTML = tag.info;
                 marker.appendChild(popup);
 
-                // Safe event bubbling suppression 
+                // Stop OSD click-drag behaviors from leaking into popup elements
                 const stopBubbling = e => e.stopPropagation();
                 ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup'].forEach(evt => {
                     popup.addEventListener(evt, stopBubbling);
@@ -223,14 +225,13 @@
 
                 viewer.addOverlay({
                     element: marker,
-                    location: new OpenSeadragon.Point(tag.x, tag.y),
-                    placement: OpenSeadragon.Placement.CENTER
+                    location: new OpenSeadragon.Point(tag.x, tag.y)
                 });
 
                 new OpenSeadragon.MouseTracker({
                     element: marker,
                     clickHandler: function() {
-                        document.querySelectorAll('#viewer .annotation-marker').forEach(m => {
+                        document.querySelectorAll('.annotation-marker').forEach(m => {
                             if (m !== marker) m.classList.remove('open');
                         });
                         marker.classList.toggle('open');
@@ -239,27 +240,28 @@
             });
         });
 
-        // --- 3. HIGH-RES SCAN VIEWER INITIALIZATION & LOADING ---
+        // --- 4. HIGH-RES SCAN VIEWER INITIALIZATION & LOADING ---
         function initScanViewer() {
             scanViewer = OpenSeadragon({
                 id: "openseadragon-viewer",
                 prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
                 showNavigator: true,
                 navigatorPosition: "BOTTOM_RIGHT",
-                clickToZoom: false
+                clickToZoom: false // Keep off so pin interactions don't auto-zoom the canvas
             });
 
-            // Coordinate Helper for high-res scans (Logs to Console)
+            // Coordinate Helper (Runs once and stays registered)
             scanViewer.addHandler('canvas-click', function(event) {
                 if (event.quick) {
                     const viewportPoint = scanViewer.viewport.pointFromPixel(event.position);
-                    console.log(`Scan Coords (${activeDziPath}) -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
+                    console.log(`Scan Coords (${scanViewer.tileSources}) -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
                 }
             });
 
-            // Inject markers whenever a new scan finishes opening
+            // Handle injecting markers whenever a new scan finishes opening
             scanViewer.addHandler('open', function() {
-                scanViewer.clearOverlays(); // Wipe previous overlay pins
+                // IMPORTANT: Wipe out previous scan elements so we don't pile up ghosts
+                scanViewer.clearOverlays();
 
                 const activeAnnotations = scanAnnotations.filter(ann => ann.parentScan === activeDziPath);
                 
@@ -272,7 +274,7 @@
                     let markerColor = "rgba(230, 126, 34, 0.9)"; // Default Orange
                     switch(ann.category) {
                         case "damage":
-                            markerColor = "rgba(231, 76, 60, 0.95)";   // Red
+                            markerColor = "rgba(231, 76, 60, 0.95)";  // Red
                             break;
                         case "inscription":
                             markerColor = "rgba(46, 204, 113, 0.95)"; // Green
@@ -298,8 +300,7 @@
 
                     scanViewer.addOverlay({
                         element: pin,
-                        location: new OpenSeadragon.Point(ann.x, ann.y),
-                        placement: OpenSeadragon.Placement.CENTER
+                        location: new OpenSeadragon.Point(ann.x, ann.y)
                     });
 
                     new OpenSeadragon.MouseTracker({
@@ -314,16 +315,17 @@
                 });
             });
         }
-
+        
+        // Dynamic Loading Function
+        // Hides the map, opens the clean viewer, and builds your high-res bas-relief
         function loadRelief(dziPath, title) {
-            // Close any open popups on the site plan before switching panels
+            // Close any open popups on the site plan before moving
             document.querySelectorAll('#viewer .annotation-marker').forEach(m => m.classList.remove('open'));
 
             // Show scan container, hide main map
             document.getElementById("map-container").style.display = "none";
             document.getElementById("viewer-container").style.display = "block";
-            
-            // Set the global tracking string before calling open()
+
             activeDziPath = dziPath;
             
             // Lazy-initialize scanViewer on first use
@@ -331,9 +333,7 @@
                 initScanViewer();
             }
 
-            // Explicitly define the tileSource object for deep zoom structure
             scanViewer.open(dziPath);
-            });
             console.log("Loading scan: " + title);
         }
 
@@ -341,7 +341,8 @@
             document.getElementById("viewer-container").style.display = "none";
             document.getElementById("map-container").style.display = "block";
             
-            // Close image stream to save memory/WebGL context
+            // Simply close the image stream rather than destroying the canvas instance.
+            // This preserves click listeners and avoids recreating WebGL/2D contexts.
             if (scanViewer) {
                 scanViewer.close();
             }
