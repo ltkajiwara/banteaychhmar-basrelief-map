@@ -5,12 +5,6 @@
     <title>Banteay Chhmar Bas-Relief Map</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/openseadragon.min.js"></script>
     <style>
-
-        body { margin: 0; background: #111; color: white; font-family: sans-serif; }
-        #viewer { width: 100vw; height: 100vh; background: #000; }
-        
-        /* Interactive marker pins on the Site Plan */
-
         body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; }
         
         /* Two full-screen viewport containers */
@@ -56,7 +50,6 @@
         }
 
         /* Interactive marker pins on the Site Plan & Scans */
-
         .annotation-marker {
             background: rgba(230, 126, 34, 0.9); /* Archaeological orange */
             border: 2px solid white;
@@ -71,10 +64,7 @@
             line-height: 28px;
             position: relative;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
-
-            /* Keep bottom-center of the marker pinned to the coordinate */
             transform-origin: center bottom; 
-
         }
         
         .annotation-marker .popup-info {
@@ -92,10 +82,8 @@
             width: 260px;
             white-space: normal;
             z-index: 100;
-
             text-align: left;
             line-height: 1.4;
-
         }
 
         .annotation-marker.open .popup-info {
@@ -104,11 +92,6 @@
     </style>
 </head>
 <body>
-
-    <div id="viewer"></div>
-
-    <script>
-        // Load the main site plan
 
     <!-- CONTAINER 1: The Interactive Site Plan -->
     <div id="map-container">
@@ -123,26 +106,17 @@
 
     <script>
         // --- 1. INITIALIZE MAIN SITE PLAN ---
-
         const viewer = OpenSeadragon({
             id: "viewer",
             prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
             clickToZoom: false, // Prevents canvas jumping when clicking markers
             tileSources: {
                 type: 'image',
-
-                url: 'bc-siteplan.jpg' // Your base site plan image
-            }
-        });
-
-        viewer.addHandler('open', function() {
-            // Your 7 gallery locations on the site plan
-
                 url: 'bc-siteplan.jpg' // Base site plan image
             }
         });
 
-        // Global variable for our secondary high-res scan viewer instance
+        // Global variables for deep zoom scans
         let scanViewer = null;
         let activeDziPath = "";
 
@@ -188,81 +162,49 @@
 
         // --- 3. POPULATE MAIN SITE PLAN MARKERS ---
         viewer.addHandler('open', function() {
-            // Your 7 gallery locations mapped to the plan layout
-
             const galleryTags = [
                 {
                     id: "N1",
                     x: 0.7678, 
                     y: 0.1288,
-
-                    info: "<strong>North Gallery (East Section 1)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"gallery_1.dzi\", \"Gallery 1 - North Elevation\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                     info: "<strong>North Gallery (East Section 1)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"NorthGallery_EastPart2_tiled.dzi\", \"North Gallery - East Section (Eastern Side)\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
->>>>>>> e45a47b4614cd87237554a64ce148f0de50b917f
                 },
                 {
                     id: "N2",
                     x: 0.6206, 
                     y: 0.1288,
-
-                    info: "<strong>North Gallery (East Section 2)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"gallery_1.dzi\", \"Gallery 1 - North Elevation\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                     info: "<strong>North Gallery (East Section 2)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"NorthGallery_EastPart1_tiled.dzi\", \"North Gallery - East Section (Western Side)\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                 },
                 {
                     id: "N3",
                     x: 0.3482, 
                     y: 0.1288,
-
-                    info: "<strong>North Gallery (West Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"gallery_1.dzi\", \"Gallery 1 - North Elevation\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                     info: "<strong>North Gallery (West Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"NorthGallery_WestPart_tiled.dzi\", \"North Gallery - West Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                 },
                 {
                     id: "W1",
                     x: 0.2236, 
                     y: 0.2158,
-
-                    info: "<strong>West Gallery (North Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"gallery_1.dzi\", \"Gallery 1 - North Elevation\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                     info: "<strong>West Gallery (North Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"WestGallery_NorthPart_tiled.dzi\", \"West Gallery - North Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                 },
                 {
                     id: "W2",
                     x: 0.2236, 
                     y: 0.4909,
-
-                    info: "<strong>West Gallery (South Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"gallery_1.dzi\", \"Gallery 1 - North Elevation\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                     info: "<strong>West Gallery (South Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"WestGallery_SouthPart_tiled.dzi\", \"West Gallery - South Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                 },
                 {
                     id: "E",
                     x: 0.8075, 
                     y: 0.4902,
-
-                    info: "<strong>East Gallery (South Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"gallery_1.dzi\", \"Gallery 1 - North Elevation\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                     info: "<strong>East Gallery (South Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"EastGallery_SouthPart_tiled.dzi\", \"East Gallery - South Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-
                 },
                 {
                     id: "S",
                     x: 0.4008,
                     y: 0.5700,
-
-                    info: "<strong>South Gallery (West Section)</strong><br>Octagonal brick temple carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"gallery_2.dzi\", \"Gallery 2 - East Elevation\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
-                }
-                // ... Add G3 through G7 here
-
                     info: "<strong>South Gallery (West Section)</strong><br>Octagonal brick temple carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"SouthGallery_WestPart_tiled.dzi\", \"South Gallery - West Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
                 }
-
             ];
 
             galleryTags.forEach(function(tag) {
@@ -274,13 +216,6 @@
                 popup.className = 'popup-info';
                 popup.innerHTML = tag.info;
                 marker.appendChild(popup);
-
-                // Stop OSD from hijacking clicks inside the popup
-                popup.addEventListener('click', function(e) { e.stopPropagation(); });
-                popup.addEventListener('mousedown', function(e) { e.stopPropagation(); });
-                popup.addEventListener('mouseup', function(e) { e.stopPropagation(); });
-                popup.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
-                popup.addEventListener('pointerup', function(e) { e.stopPropagation(); });
 
                 // Stop OSD click-drag behaviors from leaking into popup elements
                 const stopBubbling = e => e.stopPropagation();
@@ -296,32 +231,22 @@
                 new OpenSeadragon.MouseTracker({
                     element: marker,
                     clickHandler: function() {
-
                         document.querySelectorAll('.annotation-marker').forEach(m => {
                             if (m !== marker) m.classList.remove('open');
                         });
-
                         marker.classList.toggle('open');
                     }
                 });
             });
         });
 
-
-        // Dynamic Loading Function
-        // When clicked, this clears the site plan and loads the deep zoom bas-relief in the same window!
-        function loadRelief(dziPath, title) {
-            // 1. Clear the site plan overlay markers
-            viewer.clearOverlays();
-            
-            // 2. Load the high-res Deep Zoom Image
-            viewer.open(dziPath);
-            
-            // 3. Optional: You can change the browser title or add a 'Back to Plan' button
-            console.log("Loading " + title);
-        }
-
-        // Click helper for plotting coordinates
+        // Site plan coordinate helper
+        viewer.addHandler('canvas-click', function(event) {
+            if (event.quick) {
+                const viewportPoint = viewer.viewport.pointFromPixel(event.position);
+                console.log(`Site Plan Coords -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
+            }
+        });
 
         // --- 4. HIGH-RES SCAN VIEWER INITIALIZATION & LOADING ---
         function initScanViewer() {
@@ -333,18 +258,17 @@
                 clickToZoom: false // Keep off so pin interactions don't auto-zoom the canvas
             });
 
-            // Coordinate Helper (Runs once and stays registered)
+            // Coordinate Helper for high-res scans (Logs to Console)
             scanViewer.addHandler('canvas-click', function(event) {
                 if (event.quick) {
                     const viewportPoint = scanViewer.viewport.pointFromPixel(event.position);
-                    console.log(`Scan Coords (${scanViewer.tileSources}) -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
+                    console.log(`Scan Coords (${activeDziPath}) -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
                 }
             });
 
-            // Handle injecting markers whenever a new scan finishes opening
+            // Inject markers whenever a new scan finishes opening
             scanViewer.addHandler('open', function() {
-                // IMPORTANT: Wipe out previous scan elements so we don't pile up ghosts
-                scanViewer.clearOverlays();
+                scanViewer.clearOverlays(); // Wipe out previous scan elements so we don't pile up ghosts
 
                 const activeAnnotations = scanAnnotations.filter(ann => ann.parentScan === activeDziPath);
                 
@@ -357,7 +281,7 @@
                     let markerColor = "rgba(230, 126, 34, 0.9)"; // Default Orange
                     switch(ann.category) {
                         case "damage":
-                            markerColor = "rgba(231, 76, 60, 0.95)";  // Red
+                            markerColor = "rgba(231, 76, 60, 0.95)";   // Red
                             break;
                         case "inscription":
                             markerColor = "rgba(46, 204, 113, 0.95)"; // Green
@@ -407,7 +331,7 @@
             document.getElementById("map-container").style.display = "none";
             document.getElementById("viewer-container").style.display = "block";
             
-            // MODIFIED: Set the global tracking string before calling open()
+            // Set the global tracking string before calling open()
             activeDziPath = dziPath;
             
             // Lazy-initialize scanViewer on first use
@@ -423,23 +347,13 @@
             document.getElementById("viewer-container").style.display = "none";
             document.getElementById("map-container").style.display = "block";
             
-            // Simply close the image stream rather than destroying the canvas instance.
-            // This preserves click listeners and avoids recreating WebGL/2D contexts.
+            // Close image stream to save memory/WebGL context
             if (scanViewer) {
                 scanViewer.close();
             }
 
             activeDziPath = "";
         }
-
-        // Site plan coordinate helper
-
-        viewer.addHandler('canvas-click', function(event) {
-            if (event.quick) {
-                const viewportPoint = viewer.viewport.pointFromPixel(event.position);
-                console.log(`Site Plan Coords -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
-            }
-        });
     </script>
 </body>
 </html>
