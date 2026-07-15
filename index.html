@@ -82,8 +82,6 @@
             width: 260px;
             white-space: normal;
             z-index: 100;
-            text-align: left;
-            line-height: 1.4;
         }
 
         .annotation-marker.open .popup-info {
@@ -105,11 +103,22 @@
     </div>
 
     <script>
-        // Global variables for deep zoom scans
+        // 1. Initialize the main Site Plan viewer
+        const viewer = OpenSeadragon({
+            id: "viewer",
+            prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
+            clickToZoom: false, // Prevents canvas jumping when clicking markers
+            tileSources: {
+                type: 'image',
+                url: 'bayonplan.jpg' // Your base site plan image
+            }
+        });
+        
+        // Global variables for deep zoom scans        
         let scanViewer = null;
         let activeDziPath = "";
 
-        // --- 1. ANNOTATION DATABASE (FOR HIGH-RES SCANS) ---
+        // --- 2. ANNOTATION DATABASE (FOR HIGH-RES SCANS) ---
         const scanAnnotations = [
             {
                 parentScan: "NorthGallery_WestPart_tiled.dzi",
@@ -148,16 +157,6 @@
                 desc: "Location of inscription depicting prayer altar."
             }
         ];
-
-        // --- 2. INITIALIZE MAIN SITE PLAN ---
-        // Instantiating OpenSeadragon *without* immediate tileSources to bind handlers safely
-        const viewer = OpenSeadragon({
-            id: "viewer",
-            prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
-            clickToZoom: false,
-            // Use standard performance rendering
-            useCanvas: true
-        });
 
         // Add the 'open' handler BEFORE loading the image source to ensure execution
         viewer.addHandler('open', function() {
@@ -238,20 +237,6 @@
                     }
                 });
             });
-        });
-
-        // Now fire the source loading safe in the knowledge handlers are registered!
-        viewer.open({
-            type: 'image',
-            url: 'bc-siteplan.jpg'
-        });
-
-        // Site plan coordinate helper
-        viewer.addHandler('canvas-click', function(event) {
-            if (event.quick) {
-                const viewportPoint = viewer.viewport.pointFromPixel(event.position);
-                console.log(`Site Plan Coords -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
-            }
         });
 
         // --- 3. HIGH-RES SCAN VIEWER INITIALIZATION & LOADING ---
@@ -364,6 +349,14 @@
 
             activeDziPath = "";
         }
+
+        // Click helper for plotting coordinates
+        viewer.addHandler('canvas-click', function(event) {
+            if (event.quick) {
+                const viewportPoint = viewer.viewport.pointFromPixel(event.position);
+                console.log(`Site Plan Coords -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
+            }
+        });
     </script>
 </body>
 </html>
