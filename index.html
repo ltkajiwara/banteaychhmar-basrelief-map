@@ -5,9 +5,50 @@
     <title>Banteay Chhmar Bas-Relief Map</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/openseadragon.min.js"></script>
     <style>
-        body { margin: 0; background: #111; color: white; font-family: sans-serif; }
-        #viewer { width: 100vw; height: 100vh; background: #000; }
+        body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; }
         
+        /* Two full-screen viewport containers */
+        #map-container, #viewer-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #viewer, #openseadragon-viewer {
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+        
+        /* Floating Back to Map Button */
+        #back-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            padding: 12px 20px;
+            background: #2c3e50;
+            color: white;
+            border: 2px solid #34495e;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        #back-button:hover {
+            background: #34495e;
+            transform: translateY(-1px);
+        }
+
+        #back-button:active {
+            transform: translateY(1px);
+        }
+
         /* Interactive marker pins on the Site Plan */
         .annotation-marker {
             background: rgba(230, 126, 34, 0.9); /* Archaeological orange */
@@ -49,10 +90,19 @@
 </head>
 <body>
 
-    <div id="viewer"></div>
+    <!-- CONTAINER 1: The Interactive Site Plan -->
+    <div id="map-container">
+        <div id="viewer"></div>
+    </div>
+
+    <!-- CONTAINER 2: The Deep Zoom Scan Viewer (Hidden by default) -->
+    <div id="viewer-container" style="display: none;">
+        <button id="back-button" onclick="closeRelief()">&larr; Back to Site Plan</button>
+        <div id="openseadragon-viewer"></div>
+    </div>
 
     <script>
-        // Load the main site plan
+        // 1. Initialize the main Site Plan viewer
         const viewer = OpenSeadragon({
             id: "viewer",
             prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
@@ -62,6 +112,9 @@
                 url: 'bc-siteplan.jpg' // Your base site plan image
             }
         });
+
+        // Global variable to keep track of our active scan viewer instance
+        let scanViewer = null;
 
         viewer.addHandler('open', function() {
             // Your 7 gallery locations on the site plan
@@ -100,15 +153,14 @@
                     id: "E",
                     x: 0.8075, 
                     y: 0.4902,
-                    info: "<strong>East Gallery (South Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"EastGallery_SouthPart-tiled.dzi\", \"East Gallery - South Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                    info: "<strong>East Gallery (South Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"EastGallery_SouthPart_tiled.dzi\", \"East Gallery - South Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
                 },
                 {
                     id: "S",
                     x: 0.4008,
                     y: 0.5700,
-                    info: "<strong>South Gallery (West Section)</strong><br>Octagonal brick temple carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"SouthGallery_WestPart-tiled.dzi\", \"South Gallery - West Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                    info: "<strong>South Gallery (West Section)</strong><br>Octagonal brick temple carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"SouthGallery_WestPart_tiled.dzi\", \"South Gallery - West Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
                 }
-                // ... Add G3 through G7 here
             ];
 
             galleryTags.forEach(function(tag) {
@@ -136,6 +188,10 @@
                 new OpenSeadragon.MouseTracker({
                     element: marker,
                     clickHandler: function() {
+                        // Close any other open popups first
+                        document.querySelectorAll('.annotation-marker').forEach(m => {
+                            if (m !== marker) m.classList.remove('open');
+                        });
                         marker.classList.toggle('open');
                     }
                 });
@@ -143,16 +199,42 @@
         });
 
         // Dynamic Loading Function
-        // When clicked, this clears the site plan and loads the deep zoom bas-relief in the same window!
+        // Hides the map, opens the clean viewer, and builds your high-res bas-relief
         function loadRelief(dziPath, title) {
-            // 1. Clear the site plan overlay markers
-            viewer.clearOverlays();
+            // Close all popups on the main map so they're fresh when you return
+            document.querySelectorAll('.annotation-marker').forEach(m => m.classList.remove('open'));
+
+            // 1. Swap visibility of the HTML layouts
+            document.getElementById("map-container").style.display = "none";
+            document.getElementById("viewer-container").style.display = "block";
             
-            // 2. Load the high-res Deep Zoom Image
-            viewer.open(dziPath);
+            // 2. Initialize or open the scan in our secondary viewer
+            if (scanViewer) {
+                scanViewer.open(dziPath);
+            } else {
+                scanViewer = OpenSeadragon({
+                    id: "openseadragon-viewer",
+                    prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
+                    tileSources: dziPath,
+                    showNavigator: true,
+                    navigatorPosition: "BOTTOM_RIGHT"
+                });
+            }
             
-            // 3. Optional: You can change the browser title or add a 'Back to Plan' button
             console.log("Loading " + title);
+        }
+
+        // Close scan viewer and return back to your main site plan map
+        function closeRelief() {
+            // 1. Swap layout visibility back
+            document.getElementById("viewer-container").style.display = "none";
+            document.getElementById("map-container").style.display = "block";
+            
+            // 2. Destory/destroy resources on the scan viewer to keep performance lightning fast
+            if (scanViewer) {
+                scanViewer.destroy();
+                scanViewer = null;
+            }
         }
 
         // Click helper for plotting coordinates
