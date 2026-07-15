@@ -251,6 +251,15 @@
                     navigatorPosition: "BOTTOM_RIGHT",
                     clickToZoom: false // Crucial so clicking pins doesn't trigger a canvas jump zoom
                 });
+
+                // ADD THIS: Coordinate helper for the high-res scans
+                scanViewer.addHandler('canvas-click', function(event) {
+                    if (event.quick) {
+                        const viewportPoint = scanViewer.viewport.pointFromPixel(event.position);
+                        // Using scanViewer.tileSources to print which scan you are currently clicking
+                        console.log(`Scan Coords (${scanViewer.tileSources}) -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
+                    }
+                });
             }
 
             // 3. Clear out old event handlers from previous scans, then register a fresh one
