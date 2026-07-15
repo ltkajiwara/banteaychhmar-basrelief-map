@@ -116,6 +116,37 @@
         // Global variable to keep track of our active scan viewer instance
         let scanViewer = null;
 
+        // 2. SEPARATE DATABASE: For architectural markers inside the high-res scans
+        const scanAnnotations = [
+            {
+                parentScan: "NorthGallery_WestPart_tiled.dzi",
+                id: "D1",
+                x: 0.4520,
+                y: 0.3180,
+                category: "relief", 
+                title: "Avalokiteshvara Relief",
+                desc: "Narrative register detailing specific historical figures or mythical scenes."
+            },
+            {
+                parentScan: "NorthGallery_WestPart_tiled.dzi",
+                id: "CR1",
+                x: 0.6240,
+                y: 0.2850,
+                category: "damage", 
+                title: "Structural Displacement",
+                desc: "Observed movement and micro-cracking along the block joints."
+            },
+            {
+                parentScan: "NorthGallery_WestPart_tiled.dzi",
+                id: "IN1",
+                x: 0.7110,
+                y: 0.5420,
+                category: "inscription", 
+                title: "Sanskrit Epigraph",
+                desc: "Location of clear epigraphic text documenting minor temple modifications."
+            }
+        ];
+
         viewer.addHandler('open', function() {
             // Your 7 gallery locations on the site plan
             const galleryTags = [
@@ -201,7 +232,7 @@
         // Dynamic Loading Function
         // Hides the map, opens the clean viewer, and builds your high-res bas-relief
         function loadRelief(dziPath, title) {
-            // Close all popups on the main map so they're fresh when you return
+            // Close all popups on the main floor plan map
             document.querySelectorAll('.annotation-marker').forEach(m => m.classList.remove('open'));
 
             // 1. Swap visibility of the HTML layouts
@@ -217,9 +248,77 @@
                     prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
                     tileSources: dziPath,
                     showNavigator: true,
-                    navigatorPosition: "BOTTOM_RIGHT"
+                    navigatorPosition: "BOTTOM_RIGHT",
+                    clickToZoom: false // Crucial so clicking pins doesn't trigger a canvas jump zoom
                 });
             }
+
+            // 3. Clear out old event handlers from previous scans, then register a fresh one
+            scanViewer.removeAllHandlers('open'); 
+            
+            scanViewer.addHandler('open', function() {
+                // Find markers that belong *only* to this active .dzi file
+                const activeAnnotations = scanAnnotations.filter(ann => ann.parentScan === dziPath);
+                
+                activeAnnotations.forEach(function(ann) {
+                    // Create the marker pin element
+                    const pin = document.createElement('div');
+                    pin.className = 'annotation-marker'; 
+                    pin.innerText = ann.id;
+                    pin.style.border = "2px solid #fff";
+
+                    // Dynamic Category Coloring Logic
+                    let markerColor = "rgba(230, 126, 34, 0.9)"; // Default: Archaeological Orange
+
+                    switch(ann.category) {
+                        case "damage":
+                            markerColor = "rgba(231, 76, 60, 0.95)";  // Vivid Red for structural issues
+                            break;
+                        case "inscription":
+                            markerColor = "rgba(46, 204, 113, 0.95)"; // Emerald Green for text/epigraphy
+                            break;
+                        case "relief":
+                            markerColor = "rgba(155, 89, 182, 0.95)"; // Amethyst Purple for narrative art
+                            break;
+                        case "intervention":
+                            markerColor = "rgba(47, 129, 222, 0.83)"; // Dark Blue for previous works
+                    }
+
+                    // Apply style dynamic overlay background
+                    pin.style.background = markerColor;
+
+                    // Create the detail info popup window
+                    const popup = document.createElement('div');
+                    popup.className = 'popup-info';
+                    popup.innerHTML = `<strong>${ann.title}</strong><br>${ann.desc}`;
+                    pin.appendChild(popup);
+
+                    // Prevent OpenSeadragon canvas hijacking when interacting with the popup box
+                    popup.addEventListener('click', e => e.stopPropagation());
+                    popup.addEventListener('mousedown', e => e.stopPropagation());
+                    popup.addEventListener('mouseup', e => e.stopPropagation());
+                    popup.addEventListener('pointerdown', e => e.stopPropagation());
+                    popup.addEventListener('pointerup', e => e.stopPropagation());
+
+                    // Add the overlay pin directly onto the coordinates of the photogrammetry image
+                    scanViewer.addOverlay({
+                        element: pin,
+                        location: new OpenSeadragon.Point(ann.x, ann.y)
+                    });
+
+                    // Handle opening/closing popups on the elevation scan viewer
+                    new OpenSeadragon.MouseTracker({
+                        element: pin,
+                        clickHandler: function() {
+                            // Close any other open tooltips inside the active scan viewer
+                            document.querySelectorAll('#openseadragon-viewer .annotation-marker').forEach(m => {
+                                if (m !== pin) m.classList.remove('open');
+                            });
+                            pin.classList.toggle('open');
+                        }
+                    });
+                });
+            });
             
             console.log("Loading " + title);
         }
@@ -230,7 +329,7 @@
             document.getElementById("viewer-container").style.display = "none";
             document.getElementById("map-container").style.display = "block";
             
-            // 2. Destory/destroy resources on the scan viewer to keep performance lightning fast
+            // 2. Destroy resources on the scan viewer to keep performance lightning fast
             if (scanViewer) {
                 scanViewer.destroy();
                 scanViewer = null;
