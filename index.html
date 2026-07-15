@@ -332,8 +332,7 @@
             }
 
             // Explicitly define the tileSource object for deep zoom structure
-            scanViewer.open({
-                tileSource: dziPath
+            scanViewer.open(dziPath);
             });
             console.log("Loading scan: " + title);
         }
