@@ -49,7 +49,7 @@
             transform: translateY(1px);
         }
 
-        /* Interactive marker pins on the Site Plan */
+        /* Interactive marker pins on the Site Plan & Scans */
         .annotation-marker {
             background: rgba(230, 126, 34, 0.9); /* Archaeological orange */
             border: 2px solid white;
@@ -64,6 +64,8 @@
             line-height: 28px;
             position: relative;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            /* Keep bottom-center of the marker pinned to the coordinate */
+            transform-origin: center bottom; 
         }
         
         .annotation-marker .popup-info {
@@ -81,6 +83,8 @@
             width: 260px;
             white-space: normal;
             z-index: 100;
+            text-align: left;
+            line-height: 1.4;
         }
 
         .annotation-marker.open .popup-info {
@@ -102,21 +106,21 @@
     </div>
 
     <script>
-        // 1. Initialize the main Site Plan viewer
+        // --- 1. INITIALIZE MAIN SITE PLAN ---
         const viewer = OpenSeadragon({
             id: "viewer",
             prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
             clickToZoom: false, // Prevents canvas jumping when clicking markers
             tileSources: {
                 type: 'image',
-                url: 'bc-siteplan.jpg' // Your base site plan image
+                url: 'bc-siteplan.jpg' // Base site plan image
             }
         });
 
-        // Global variable to keep track of our active scan viewer instance
+        // Global variable for our secondary high-res scan viewer instance
         let scanViewer = null;
 
-        // 2. SEPARATE DATABASE: For architectural markers inside the high-res scans
+        // --- 2. ANNOTATION DATABASE (FOR HIGH-RES SCANS) ---
         const scanAnnotations = [
             {
                 parentScan: "NorthGallery_WestPart_tiled.dzi",
@@ -134,7 +138,7 @@
                 y: 0.0459,
                 category: "intervention", 
                 title: "New Stones Added",
-                desc: "Fresh sandstone added, engravings cartially completed."
+                desc: "Fresh sandstone added, engravings partially completed."
             },
             {
                 parentScan: "NorthGallery_WestPart_tiled.dzi",
@@ -156,8 +160,9 @@
             }
         ];
 
+        // --- 3. POPULATE MAIN SITE PLAN MARKERS ---
         viewer.addHandler('open', function() {
-            // Your 7 gallery locations on the site plan
+            // Your 7 gallery locations mapped to the plan layout
             const galleryTags = [
                 {
                     id: "N1",
@@ -213,12 +218,11 @@
                 popup.innerHTML = tag.info;
                 marker.appendChild(popup);
 
-                // Stop OSD from hijacking clicks inside the popup
-                popup.addEventListener('click', function(e) { e.stopPropagation(); });
-                popup.addEventListener('mousedown', function(e) { e.stopPropagation(); });
-                popup.addEventListener('mouseup', function(e) { e.stopPropagation(); });
-                popup.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
-                popup.addEventListener('pointerup', function(e) { e.stopPropagation(); });
+                // Stop OSD click-drag behaviors from leaking into popup elements
+                const stopBubbling = e => e.stopPropagation();
+                ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup'].forEach(evt => {
+                    popup.addEventListener(evt, stopBubbling);
+                });
 
                 viewer.addOverlay({
                     element: marker,
@@ -228,7 +232,6 @@
                 new OpenSeadragon.MouseTracker({
                     element: marker,
                     clickHandler: function() {
-                        // Close any other open popups first
                         document.querySelectorAll('.annotation-marker').forEach(m => {
                             if (m !== marker) m.classList.remove('open');
                         });
@@ -238,97 +241,73 @@
             });
         });
 
-        // Dynamic Loading Function
-        // Hides the map, opens the clean viewer, and builds your high-res bas-relief
-        function loadRelief(dziPath, title) {
-            // Close all popups on the main floor plan map
-            document.querySelectorAll('.annotation-marker').forEach(m => m.classList.remove('open'));
+        // --- 4. HIGH-RES SCAN VIEWER INITIALIZATION & LOADING ---
+        function initScanViewer() {
+            scanViewer = OpenSeadragon({
+                id: "openseadragon-viewer",
+                prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
+                showNavigator: true,
+                navigatorPosition: "BOTTOM_RIGHT",
+                clickToZoom: false // Keep off so pin interactions don't auto-zoom the canvas
+            });
 
-            // 1. Swap visibility of the HTML layouts
-            document.getElementById("map-container").style.display = "none";
-            document.getElementById("viewer-container").style.display = "block";
-            
-            // 2. Initialize or open the scan in our secondary viewer
-            if (scanViewer) {
-                scanViewer.open(dziPath);
-            } else {
-                scanViewer = OpenSeadragon({
-                    id: "openseadragon-viewer",
-                    prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
-                    tileSources: dziPath,
-                    showNavigator: true,
-                    navigatorPosition: "BOTTOM_RIGHT",
-                    clickToZoom: false // Crucial so clicking pins doesn't trigger a canvas jump zoom
-                });
+            // Coordinate Helper (Runs once and stays registered)
+            scanViewer.addHandler('canvas-click', function(event) {
+                if (event.quick) {
+                    const viewportPoint = scanViewer.viewport.pointFromPixel(event.position);
+                    console.log(`Scan Coords (${scanViewer.tileSources}) -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
+                }
+            });
 
-                // ADD THIS: Coordinate helper for the high-res scans
-                scanViewer.addHandler('canvas-click', function(event) {
-                    if (event.quick) {
-                        const viewportPoint = scanViewer.viewport.pointFromPixel(event.position);
-                        // Using scanViewer.tileSources to print which scan you are currently clicking
-                        console.log(`Scan Coords (${scanViewer.tileSources}) -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
-                    }
-                });
-            }
-
-            // 3. Clear out old event handlers from previous scans, then register a fresh one
-            scanViewer.removeAllHandlers('open'); 
-            
+            // Handle injecting markers whenever a new scan finishes opening
             scanViewer.addHandler('open', function() {
-                // Find markers that belong *only* to this active .dzi file
-                const activeAnnotations = scanAnnotations.filter(ann => ann.parentScan === dziPath);
+                // IMPORTANT: Wipe out previous scan elements so we don't pile up ghosts
+                scanViewer.clearOverlays();
+
+                const currentDzi = scanViewer.tileSources;
+                const activeAnnotations = scanAnnotations.filter(ann => ann.parentScan === currentDzi);
                 
                 activeAnnotations.forEach(function(ann) {
-                    // Create the marker pin element
                     const pin = document.createElement('div');
                     pin.className = 'annotation-marker'; 
                     pin.innerText = ann.id;
-                    pin.style.border = "2px solid #fff";
 
-                    // Dynamic Category Coloring Logic
-                    let markerColor = "rgba(230, 126, 34, 0.9)"; // Default: Archaeological Orange
-
+                    // Color profile styling map
+                    let markerColor = "rgba(230, 126, 34, 0.9)"; // Default Orange
                     switch(ann.category) {
                         case "damage":
-                            markerColor = "rgba(231, 76, 60, 0.95)";  // Vivid Red for structural issues
+                            markerColor = "rgba(231, 76, 60, 0.95)";  // Red
                             break;
                         case "inscription":
-                            markerColor = "rgba(46, 204, 113, 0.95)"; // Emerald Green for text/epigraphy
+                            markerColor = "rgba(46, 204, 113, 0.95)"; // Green
                             break;
                         case "relief":
-                            markerColor = "rgba(155, 89, 182, 0.95)"; // Amethyst Purple for narrative art
+                            markerColor = "rgba(155, 89, 182, 0.95)"; // Purple
                             break;
                         case "intervention":
-                            markerColor = "rgba(47, 129, 222, 0.83)"; // Dark Blue for previous works
+                            markerColor = "rgba(47, 129, 222, 0.83)"; // Blue
+                            break;
                     }
-
-                    // Apply style dynamic overlay background
                     pin.style.background = markerColor;
 
-                    // Create the detail info popup window
                     const popup = document.createElement('div');
                     popup.className = 'popup-info';
                     popup.innerHTML = `<strong>${ann.title}</strong><br>${ann.desc}`;
                     pin.appendChild(popup);
 
-                    // Prevent OpenSeadragon canvas hijacking when interacting with the popup box
-                    popup.addEventListener('click', e => e.stopPropagation());
-                    popup.addEventListener('mousedown', e => e.stopPropagation());
-                    popup.addEventListener('mouseup', e => e.stopPropagation());
-                    popup.addEventListener('pointerdown', e => e.stopPropagation());
-                    popup.addEventListener('pointerup', e => e.stopPropagation());
+                    const stopBubbling = e => e.stopPropagation();
+                    ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup'].forEach(evt => {
+                        popup.addEventListener(evt, stopBubbling);
+                    });
 
-                    // Add the overlay pin directly onto the coordinates of the photogrammetry image
                     scanViewer.addOverlay({
                         element: pin,
                         location: new OpenSeadragon.Point(ann.x, ann.y)
                     });
 
-                    // Handle opening/closing popups on the elevation scan viewer
                     new OpenSeadragon.MouseTracker({
                         element: pin,
                         clickHandler: function() {
-                            // Close any other open tooltips inside the active scan viewer
                             document.querySelectorAll('#openseadragon-viewer .annotation-marker').forEach(m => {
                                 if (m !== pin) m.classList.remove('open');
                             });
@@ -337,24 +316,37 @@
                     });
                 });
             });
-            
-            console.log("Loading " + title);
         }
 
-        // Close scan viewer and return back to your main site plan map
+        function loadRelief(dziPath, title) {
+            // Close any open popups on the site plan before moving
+            document.querySelectorAll('#viewer .annotation-marker').forEach(m => m.classList.remove('open'));
+
+            // Show scan container, hide main map
+            document.getElementById("map-container").style.display = "none";
+            document.getElementById("viewer-container").style.display = "block";
+            
+            // Lazy-initialize scanViewer on first use
+            if (!scanViewer) {
+                initScanViewer();
+            }
+
+            scanViewer.open(dziPath);
+            console.log("Loading scan: " + title);
+        }
+
         function closeRelief() {
-            // 1. Swap layout visibility back
             document.getElementById("viewer-container").style.display = "none";
             document.getElementById("map-container").style.display = "block";
             
-            // 2. Destroy resources on the scan viewer to keep performance lightning fast
+            // Simply close the image stream rather than destroying the canvas instance.
+            // This preserves click listeners and avoids recreating WebGL/2D contexts.
             if (scanViewer) {
-                scanViewer.destroy();
-                scanViewer = null;
+                scanViewer.close();
             }
         }
 
-        // Click helper for plotting coordinates
+        // Site plan coordinate helper
         viewer.addHandler('canvas-click', function(event) {
             if (event.quick) {
                 const viewportPoint = viewer.viewport.pointFromPixel(event.position);
