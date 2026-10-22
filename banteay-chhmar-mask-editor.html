@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Banteay Chhmar Bas-Relief Map</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/openseadragon.min.js"></script>
+    <style>
+        body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; }
+        
+        /* Two full-screen viewport containers */
+        #map-container, #viewer-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #viewer, #openseadragon-viewer {
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+        
+        /* Floating Back to Map Button */
+        #back-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            padding: 12px 20px;
+            background: #2c3e50;
+            color: white;
+            border: 2px solid #34495e;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        #back-button:hover {
+            background: #34495e;
+            transform: translateY(-1px);
+        }
+
+        #back-button:active {
+            transform: translateY(1px);
+        }
+
+        /* Interactive marker pins on the Site Plan */
+        .annotation-marker {
+            background: rgba(31, 117, 53, 0.8); /* dark green */
+            border: 2px solid white;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            cursor: pointer;
+            color: white;
+            font-size: 13px;
+            font-weight: bold;
+            text-align: center;
+            line-height: 28px;
+            position: relative;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            /* Keep bottom-center of the marker pinned to the coordinate */
+            transform-origin: center bottom; 
+        }
+        
+        .annotation-marker .popup-info {
+            display: none;
+            position: absolute;
+            bottom: 36px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid #444;
+            color: white;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 260px;
+            white-space: normal;
+            z-index: 100;
+        }
+
+        .annotation-marker.open .popup-info {
+            display: block;
+        }
+
+        .scan-credit-panel { display: flex !important; flex-direction: column;
+            align-items: flex-end; gap: 6px; margin: 0; }
+        .scan-credit-panel .navigator { margin: 0 !important; }
+        .scan-credits { padding: 7px 10px; background: rgba(0,0,0,.75);
+            color: #ddd; border-radius: 4px; font-size: 11px;
+            line-height: 1.5; text-align: right; white-space: nowrap; }
+        .mask-editor { margin: 12px; padding: 12px; background: #18212a;
+            border: 1px solid #647486; border-radius: 6px; color: white;
+            width: 300px; max-width: calc(100vw - 48px); font-size: 13px; }
+        .mask-editor button { padding: 7px; margin: 3px; cursor: pointer; }
+        .mask-editor p { margin: 8px 0; line-height: 1.4; }
+        #openseadragon-viewer.mask-tracing .annotation-marker { visibility: hidden; }
+    </style>
+</head>
+<body>
+
+    <!-- CONTAINER 1: The Interactive Site Plan -->
+    <div id="map-container">
+        <div id="viewer"></div>
+    </div>
+
+    <!-- CONTAINER 2: The Deep Zoom Scan Viewer (Hidden by default) -->
+    <div id="viewer-container" style="display: none;">
+        <button id="back-button" onclick="closeRelief()">&larr; Back to Site Plan</button>
+        <div id="openseadragon-viewer"></div>
+    </div>
+
+    <script id="relief-masks" type="application/json">{}</script>
+    <script>
+        // Capture the clean page before OpenSeadragon creates its runtime elements.
+        const maskPageTemplate = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+        const reliefMasks = JSON.parse(document.getElementById("relief-masks").textContent);
+        const maskEditMode = new URLSearchParams(location.search).get("edit") === "1";
+
+        // 1. Initialize the main Site Plan viewer
+        const viewer = OpenSeadragon({
+            id: "viewer",
+            prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
+            clickToZoom: false, // Prevents canvas jumping when clicking markers
+            tileSources: {
+                type: 'image',
+                url: 'bc-siteplan.jpg' // Your base site plan image
+            }
+        });
+
+        const sitePlanCredits = document.createElement("div");
+        sitePlanCredits.className = "scan-credits";
+        sitePlanCredits.textContent = "Ministry of Culture and Fine Arts (Cambodia) and University of Tsukuba (Japan)";
+        viewer.addControl(sitePlanCredits, {
+            anchor: OpenSeadragon.ControlAnchor.BOTTOM_RIGHT, autoFade: false
+        });
+
+        // Global variable to keep track of our active scan viewer instance
+        let scanViewer = null;
+        let activeDziPath = ""; // <-- Track the active DZI string path globally
+
+        // --- 2. ANNOTATION DATABASE (FOR HIGH-RES SCANS) ---
+        const scanAnnotations = [
+            {
+                parentScan: "NorthGallery_WestPart_tiled.dzi",
+                id: "I-1",
+                x: 0.4087,
+                y: 0.0351,
+                category: "intervention", 
+                title: "New Stones Added",
+                desc: "Fresh sandstone added, engravings not transferred or replicated."
+            },
+            {
+                parentScan: "NorthGallery_WestPart_tiled.dzi",
+                id: "I-2",
+                x: 0.7516,
+                y: 0.0459,
+                category: "intervention", 
+                title: "New Stones Added",
+                desc: "Fresh sandstone added, engravings partially completed."
+            },
+            {
+                parentScan: "NorthGallery_WestPart_tiled.dzi",
+                id: "D-1",
+                x: 0.5354,
+                y: 0.0119,
+                category: "damage", 
+                title: "Missing Element",
+                desc: "Top portion of perimeter wall collapsed or missing."
+            },
+            {
+                parentScan: "NorthGallery_WestPart_tiled.dzi",
+                id: "R-1",
+                x: 0.9152,
+                y: 0.0265,
+                category: "relief", 
+                title: "Prayer Altar",
+                desc: "Location of inscription depicting prayer altar."
+            }
+        ];
+
+        // --- 3. POPULATE MAIN SITE PLAN MARKERS ---
+        viewer.addHandler('open', function() {
+            // Your gallery locations on the site plan
+            const galleryTags = [
+                {
+                    id: "N1",
+                    x: 0.7678, 
+                    y: 0.1288,
+                    info: "<strong>North Gallery (East Section 1)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"NorthGallery_EastPart2_tiled.dzi\", \"North Gallery - East Section (Eastern Side)\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                },
+                {
+                    id: "N2",
+                    x: 0.6206, 
+                    y: 0.1288,
+                    info: "<strong>North Gallery (East Section 2)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"NorthGallery_EastPart1_tiled.dzi\", \"North Gallery - East Section (Western Side)\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                },
+                {
+                    id: "N3",
+                    x: 0.3482, 
+                    y: 0.1288,
+                    info: "<strong>North Gallery (West Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"NorthGallery_WestPart_tiled.dzi\", \"North Gallery - West Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                },
+                {
+                    id: "W1",
+                    x: 0.2236, 
+                    y: 0.2158,
+                    info: "<strong>West Gallery (North Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"WestGallery_NorthPart_tiled.dzi\", \"West Gallery - North Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                },
+                {
+                    id: "W2",
+                    x: 0.2236, 
+                    y: 0.4909,
+                    info: "<strong>West Gallery (South Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"WestGallery_SouthPart_tiled.dzi\", \"West Gallery - South Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                },
+                {
+                    id: "E",
+                    x: 0.8075, 
+                    y: 0.4902,
+                    info: "<strong>East Gallery (South Section)</strong><br>Bas-relief depicting narrative carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"EastGallery_SouthPart_tiled.dzi\", \"East Gallery - South Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                },
+                {
+                    id: "S",
+                    x: 0.4008,
+                    y: 0.5700,
+                    info: "<strong>South Gallery (West Section)</strong><br>Octagonal brick temple carvings.<br><br><a href='javascript:void(0);' onclick='loadRelief(\"SouthGallery_WestPart_tiled.dzi\", \"South Gallery - West Section\")' style='color: #3498db; text-decoration: underline; font-weight: bold;'>Open High-Res Scan &rarr;</a>"
+                }
+            ];
+
+            galleryTags.forEach(function(tag) {
+                const marker = document.createElement('div');
+                marker.className = 'annotation-marker';
+                marker.innerText = tag.id;
+
+                const popup = document.createElement('div');
+                popup.className = 'popup-info';
+                popup.innerHTML = tag.info;
+                marker.appendChild(popup);
+
+                // Stop OSD click-drag behaviors from leaking into popup elements
+                const stopBubbling = e => e.stopPropagation();
+                ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup'].forEach(evt => {
+                    popup.addEventListener(evt, stopBubbling);
+                });
+
+                viewer.addOverlay({
+                    element: marker,
+                    location: new OpenSeadragon.Point(tag.x, tag.y)
+                });
+
+                new OpenSeadragon.MouseTracker({
+                    element: marker,
+                    clickHandler: function() {
+                        document.querySelectorAll('.annotation-marker').forEach(m => {
+                            if (m !== marker) m.classList.remove('open');
+                        });
+                        marker.classList.toggle('open');
+                    }
+                });
+            });
+        });
+
+        // --- 4. HIGH-RES SCAN VIEWER INITIALIZATION & LOADING ---
+        function initScanViewer() {
+            scanViewer = OpenSeadragon({
+                id: "openseadragon-viewer",
+                prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
+                showNavigator: true,
+                navigatorPosition: "BOTTOM_RIGHT",
+                clickToZoom: false // Keep off so pin interactions don't auto-zoom the canvas
+            });
+
+            const creditPanel = document.createElement("div");
+            creditPanel.className = "scan-credit-panel";
+            const credits = document.createElement("div");
+            credits.className = "scan-credits";
+            credits.textContent = "Ministry of Culture and Fine Arts (Cambodia) and University of Tsukuba (Japan)";
+            const navigatorElement = scanViewer.navigator.element;
+            scanViewer.removeControl(navigatorElement);
+            creditPanel.append(navigatorElement, credits);
+            scanViewer.addControl(creditPanel, {
+                anchor: OpenSeadragon.ControlAnchor.BOTTOM_RIGHT, autoFade: false
+            });
+            installMaskEditor();
+
+            // Coordinate Helper (Runs once and stays registered)
+            scanViewer.addHandler('canvas-click', function(event) {
+                if (event.quick) {
+                    const viewportPoint = scanViewer.viewport.pointFromPixel(event.position);
+                    console.log(`Scan Coords (${scanViewer.tileSources}) -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
+                }
+            });
+
+            // Handle injecting markers whenever a new scan finishes opening
+            scanViewer.addHandler('open', function() {
+                // IMPORTANT: Wipe out previous scan elements so we don't pile up ghosts
+                scanViewer.clearOverlays();
+
+                const activeAnnotations = scanAnnotations.filter(ann => ann.parentScan === activeDziPath);
+                
+                activeAnnotations.forEach(function(ann) {
+                    const pin = document.createElement('div');
+                    pin.className = 'annotation-marker'; 
+                    pin.innerText = ann.id;
+
+                    // Color profile styling map
+                    let markerColor = "rgba(230, 126, 34, 0.9)"; // Default Orange
+                    switch(ann.category) {
+                        case "damage":
+                            markerColor = "rgba(231, 76, 60, 0.95)";  // Red
+                            break;
+                        case "inscription":
+                            markerColor = "rgba(46, 204, 113, 0.95)"; // Green
+                            break;
+                        case "relief":
+                            markerColor = "rgba(155, 89, 182, 0.95)"; // Purple
+                            break;
+                        case "intervention":
+                            markerColor = "rgba(47, 129, 222, 0.83)"; // Blue
+                            break;
+                    }
+                    pin.style.background = markerColor;
+
+                    const popup = document.createElement('div');
+                    popup.className = 'popup-info';
+                    popup.innerHTML = `<strong>${ann.title}</strong><br>${ann.desc}`;
+                    pin.appendChild(popup);
+
+                    const stopBubbling = e => e.stopPropagation();
+                    ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup'].forEach(evt => {
+                        popup.addEventListener(evt, stopBubbling);
+                    });
+
+                    scanViewer.addOverlay({
+                        element: pin,
+                        location: new OpenSeadragon.Point(ann.x, ann.y)
+                    });
+
+                    new OpenSeadragon.MouseTracker({
+                        element: pin,
+                        clickHandler: function() {
+                            document.querySelectorAll('#openseadragon-viewer .annotation-marker').forEach(m => {
+                                if (m !== pin) m.classList.remove('open');
+                            });
+                            pin.classList.toggle('open');
+                        }
+                    });
+                });
+            });
+        }
+        
+        // Dynamic Loading Function
+        // Hides the map, opens the clean viewer, and builds your high-res bas-relief
+        function loadRelief(dziPath, title) {
+            // Close any open popups on the site plan before moving
+            document.querySelectorAll('#viewer .annotation-marker').forEach(m => m.classList.remove('open'));
+
+            // Show scan container, hide main map
+            document.getElementById("map-container").style.display = "none";
+            document.getElementById("viewer-container").style.display = "block";
+
+            activeDziPath = dziPath;
+            
+            // Lazy-initialize scanViewer on first use
+            if (!scanViewer) {
+                initScanViewer();
+            }
+
+            scanViewer.open(dziPath);
+            console.log("Loading scan: " + title);
+        }
+
+        function closeRelief() {
+            document.getElementById("viewer-container").style.display = "none";
+            document.getElementById("map-container").style.display = "block";
+            
+            // Simply close the image stream rather than destroying the canvas instance.
+            // This preserves click listeners and avoids recreating WebGL/2D contexts.
+            if (scanViewer) {
+                scanViewer.close();
+            }
+
+            activeDziPath = "";
+        }
+
+
+        // Optional outline editor: add ?edit=1 to the page URL to show its controls.
+        function installMaskEditor() {
+            const host = document.getElementById("openseadragon-viewer");
+            const svgNS = "http://www.w3.org/2000/svg";
+            const guide = document.createElementNS(svgNS, "svg");
+            guide.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:20;";
+            scanViewer.container.appendChild(guide);
+            let points = [];
+            let tracing = false;
+            let previewing = false;
+            let dirty = false;
+            let panel, status;
+
+            function setStatus(text) { if (status) status.textContent = text; }
+            function cropItem(item, polygon) {
+                if (!item) return;
+                if (polygon && polygon.length >= 3) item.setCroppingPolygons([polygon]);
+                else item.resetCroppingPolygons();
+            }
+            function applyCrop(polygon) {
+                cropItem(scanViewer.world.getItemAt(0), polygon);
+                cropItem(scanViewer.navigator.world.getItemAt(0), polygon);
+                scanViewer.forceRedraw();
+                scanViewer.navigator.forceRedraw();
+            }
+            function setTracing(value) {
+                tracing = value;
+                host.classList.toggle("mask-tracing", value);
+            }
+            function drawGuide() {
+                guide.replaceChildren();
+                if (!tracing || !points.length) return;
+                const item = scanViewer.world.getItemAt(0);
+                if (!item) return;
+                const pixels = points.map(p => scanViewer.viewport.pixelFromPoint(
+                    item.imageToViewportCoordinates(new OpenSeadragon.Point(p.x, p.y)), true));
+                const line = document.createElementNS(svgNS, "polyline");
+                line.setAttribute("points", pixels.map(p => p.x + "," + p.y).join(" "));
+                line.setAttribute("fill", "none");
+                line.setAttribute("stroke", "#00ffff");
+                line.setAttribute("stroke-width", "2");
+                guide.appendChild(line);
+                pixels.forEach((p, i) => {
+                    const dot = document.createElementNS(svgNS, "circle");
+                    dot.setAttribute("cx", p.x); dot.setAttribute("cy", p.y);
+                    dot.setAttribute("r", "4"); dot.setAttribute("fill", "#00ffff");
+                    guide.appendChild(dot);
+                    const label = document.createElementNS(svgNS, "text");
+                    label.setAttribute("x", p.x + 7); label.setAttribute("y", p.y - 7);
+                    label.setAttribute("fill", "white"); label.setAttribute("font-size", "12");
+                    label.setAttribute("stroke", "black"); label.setAttribute("stroke-width", "3");
+                    label.setAttribute("paint-order", "stroke");
+                    label.textContent = i + 1; guide.appendChild(label);
+                });
+            }
+            function exportPage() {
+                if (tracing || previewing) {
+                    setStatus("Click Keep outline or Cancel edits before downloading."); return;
+                }
+                const data = JSON.stringify(reliefMasks).replace(/</g, "\\u003c");
+                const output = maskPageTemplate.replace(
+                    /(<script id="relief-masks" type="application\/json">)[\s\S]*?(<\/script>)/,
+                    (_, start, end) => start + data + end);
+                const blob = new Blob([output], {type: "text/html;charset=utf-8"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a"); a.href = url;
+                a.download = "banteay-chhmar-cleaned.html"; a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                dirty = false;
+                setStatus("Download created. Use it to replace your website HTML file after testing.");
+            }
+            if (maskEditMode) {
+                panel = document.createElement("div");
+                panel.className = "mask-editor";
+                const heading = document.createElement("strong");
+                heading.textContent = "Wall outline editor";
+                panel.appendChild(heading);
+                const instructions = document.createElement("p");
+                instructions.textContent = "Start outline, then click around the wall in order. Scroll to zoom; drag to move. Preview closes the outline.";
+                panel.appendChild(instructions);
+                function button(label, action) {
+                    const b = document.createElement("button");
+                    b.type = "button"; b.textContent = label;
+                    b.addEventListener("click", action); panel.appendChild(b);
+                }
+                button("Start outline", () => {
+                    if (!scanViewer.world.getItemAt(0)) return;
+                    if ((tracing || previewing) && !confirm("Discard the current draft and start again?")) return;
+                    points = []; previewing = false; setTracing(true);
+                    applyCrop(null); drawGuide();
+                    setStatus("Click along the wall edge in order. Keep the wall INSIDE your outline.");
+                });
+                button("Undo point", () => {
+                    if (!tracing && !previewing) return;
+                    previewing = false; setTracing(true); applyCrop(null);
+                    points.pop(); drawGuide(); setStatus(points.length + " points. Continue tracing.");
+                });
+                button("Preview", () => {
+                    if (points.length < 3 || (!tracing && !previewing)) {
+                        setStatus("Start an outline and add at least three points first."); return;
+                    }
+                    setTracing(false); previewing = true; drawGuide(); applyCrop(points);
+                    setStatus("Preview only. Keep outline to accept, or Continue tracing to adjust.");
+                });
+                button("Continue tracing", () => {
+                    if (!previewing) return;
+                    previewing = false; setTracing(true); applyCrop(null); drawGuide();
+                    setStatus("Continue adding points. Undo point removes the last one.");
+                });
+                button("Keep outline", () => {
+                    if (!previewing) { setStatus("Click Preview before keeping an outline."); return; }
+                    reliefMasks[activeDziPath] = points.map(p => ({x: p.x, y: p.y}));
+                    previewing = false; dirty = true;
+                    setStatus("Outline kept in this tab. Download HTML to make it permanent.");
+                });
+                button("Cancel edits", () => {
+                    points = []; previewing = false; setTracing(false); drawGuide();
+                    applyCrop(reliefMasks[activeDziPath]);
+                    setStatus("Draft cancelled. Previously kept outline restored.");
+                });
+                button("Remove outline", () => {
+                    if (!confirm("Remove this elevation's outline? The image tiles will not change.")) return;
+                    delete reliefMasks[activeDziPath]; points = []; previewing = false;
+                    setTracing(false); drawGuide(); applyCrop(null); dirty = true;
+                    setStatus("Outline removed in this tab. Download HTML to save this change.");
+                });
+                button("Download HTML", exportPage);
+                status = document.createElement("p");
+                status.setAttribute("role", "status"); panel.appendChild(status);
+                scanViewer.addControl(panel, {
+                    anchor: OpenSeadragon.ControlAnchor.TOP_RIGHT, autoFade: false
+                });
+                window.addEventListener("beforeunload", e => {
+                    if (dirty || tracing || previewing) { e.preventDefault(); e.returnValue = ""; }
+                });
+            }
+            scanViewer.addHandler("canvas-click", e => {
+                if (!tracing || !e.quick) return;
+                e.preventDefaultAction = true;
+                const item = scanViewer.world.getItemAt(0);
+                if (!item) return;
+                const p = item.viewportToImageCoordinates(scanViewer.viewport.pointFromPixel(e.position, true));
+                const size = item.getContentSize();
+                if (p.x < 0 || p.y < 0 || p.x > size.x || p.y > size.y) {
+                    setStatus("Click inside the image area."); return;
+                }
+                points.push({x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100});
+                drawGuide(); setStatus(points.length + " points. Continue around the wall, then Preview.");
+            });
+            scanViewer.addHandler("canvas-double-click", e => {
+                if (tracing) e.preventDefaultAction = true;
+            });
+            scanViewer.addHandler("animation", drawGuide);
+            scanViewer.addHandler("resize", drawGuide);
+            scanViewer.addHandler("open", () => {
+                points = []; previewing = false; setTracing(false); drawGuide();
+                applyCrop(reliefMasks[activeDziPath]);
+                setStatus(reliefMasks[activeDziPath] ?
+                    "This elevation has a kept outline. Start outline replaces it after you accept a new one." :
+                    "No outline yet. Click Start outline.");
+            });
+            scanViewer.navigator.addHandler("open", () => {
+                cropItem(scanViewer.navigator.world.getItemAt(0),
+                    previewing ? points : tracing ? null : reliefMasks[activeDziPath]);
+                scanViewer.navigator.forceRedraw();
+            });
+            scanViewer.addHandler("close", () => {
+                points = []; previewing = false; setTracing(false); drawGuide();
+            });
+        }
+
+        // Click helper for plotting coordinates
+        viewer.addHandler('canvas-click', function(event) {
+            if (event.quick) {
+                const viewportPoint = viewer.viewport.pointFromPixel(event.position);
+                console.log(`Site Plan Coords -> X: ${viewportPoint.x.toFixed(4)}, Y: ${viewportPoint.y.toFixed(4)}`);
+            }
+        });
+    </script>
+</body>
+</html>
