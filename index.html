@@ -100,6 +100,13 @@
         .mask-editor button { padding: 7px; margin: 3px; cursor: pointer; }
         .mask-editor p { margin: 8px 0; line-height: 1.4; }
         #openseadragon-viewer.mask-tracing .annotation-marker { visibility: hidden; }
+        .drawing-controls { margin: 12px; padding: 12px; background: rgba(24,33,42,.95);
+            border: 1px solid #647486; border-radius: 6px; color: white;
+            width: 240px; max-width: calc(100vw - 48px); font-size: 13px; }
+        .drawing-controls[hidden] { display: none !important; }
+        .drawing-controls label { display: block; margin-bottom: 8px; }
+        .drawing-controls input[type="range"] { width: 100%; }
+        .drawing-controls p { margin: 6px 0 0; line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -290,6 +297,7 @@
                 anchor: OpenSeadragon.ControlAnchor.BOTTOM_RIGHT, autoFade: false
             });
             installMaskEditor();
+            installDrawingControls();
 
             // Coordinate Helper (Runs once and stays registered)
             scanViewer.addHandler('canvas-click', function(event) {
@@ -393,6 +401,79 @@
             activeDziPath = "";
         }
 
+
+        // Drawing exports share the photographic base's full pixel canvas.
+        function installDrawingControls() {
+            const basePath = "NorthGallery_WestPart_tiled.dzi";
+            const drawingPath = "NorthGallery-WestPart-linework_aligned.dzi";
+            const panel = document.createElement("div");
+            panel.className = "drawing-controls";
+            panel.hidden = true;
+            panel.innerHTML = `<label><input type="checkbox" id="drawing-visible"> Show drawing</label>
+                <label for="drawing-opacity">Drawing opacity: <output id="drawing-opacity-value">60%</output></label>
+                <input id="drawing-opacity" type="range" min="0" max="100" value="60" step="1">
+                <p id="drawing-status" role="status" aria-live="polite"></p>`;
+            const toggle = panel.querySelector("#drawing-visible");
+            const slider = panel.querySelector("#drawing-opacity");
+            const value = panel.querySelector("#drawing-opacity-value");
+            const status = panel.querySelector("#drawing-status");
+            let drawing = null, loading = false, generation = 0;
+            const opacity = () => toggle.checked ? Number(slider.value) / 100 : 0;
+            function reset() {
+                generation++;
+                drawing = null; loading = false; toggle.checked = false;
+                panel.hidden = true; status.textContent = "";
+                slider.value = "60"; value.textContent = "60%";
+            }
+            function update() {
+                value.textContent = slider.value + "%";
+                if (drawing) { drawing.setOpacity(opacity()); return; }
+                if (!toggle.checked || loading || activeDziPath !== basePath) return;
+                const base = scanViewer.world.getItemAt(0);
+                if (!base) return;
+                const ticket = generation;
+                const bounds = base.getBounds();
+                loading = true; status.textContent = "Loading drawing…";
+                scanViewer.addTiledImage({
+                    tileSource: drawingPath,
+                    x: bounds.x, y: bounds.y, width: bounds.width,
+                    opacity: opacity(),
+                    success: function(event) {
+                        if (ticket !== generation || activeDziPath !== basePath ||
+                            scanViewer.world.getItemAt(0) !== base) {
+                            if (scanViewer.world.getIndexOfItem(event.item) >= 0)
+                                scanViewer.world.removeItem(event.item);
+                            return;
+                        }
+                        loading = false;
+                        const a = base.getContentSize(), b = event.item.getContentSize();
+                        if (a.x !== b.x || a.y !== b.y) {
+                            scanViewer.world.removeItem(event.item);
+                            toggle.checked = false;
+                            status.textContent = "Drawing dimensions differ from the photo. Check the full-canvas export.";
+                            return;
+                        }
+                        drawing = event.item;
+                        drawing.setOpacity(opacity());
+                        status.textContent = "";
+                    },
+                    error: function() {
+                        if (ticket !== generation) return;
+                        loading = false; toggle.checked = false;
+                        status.textContent = "Drawing could not load. Check that its DZI and tile folder are uploaded, then try again.";
+                    }
+                });
+            }
+            toggle.addEventListener("change", update);
+            slider.addEventListener("input", update);
+            scanViewer.addControl(panel, {
+                anchor: OpenSeadragon.ControlAnchor.BOTTOM_LEFT, autoFade: false
+            });
+            scanViewer.addHandler("close", reset);
+            scanViewer.addHandler("open", function() {
+                reset(); panel.hidden = activeDziPath !== basePath;
+            });
+        }
 
         // Optional editor: add ?edit=1 to the page address.
         function installMaskEditor() {
@@ -498,8 +579,8 @@
                 ]);
             }
             function applyCrop() {
-                cropItem(scanViewer.world.getItemAt(0));
-                cropItem(scanViewer.navigator.world.getItemAt(0));
+                for(let i=0;i<scanViewer.world.getItemCount();i++) cropItem(scanViewer.world.getItemAt(i));
+                for(let i=0;i<scanViewer.navigator.world.getItemCount();i++) cropItem(scanViewer.navigator.world.getItemAt(i));
                 scanViewer.forceRedraw(); scanViewer.navigator.forceRedraw();
             }
             function setTracing(value) {
@@ -637,6 +718,9 @@
                 setStatus(points.length+" points. "+(mode==="cutout" ? "Enclosed area will be hidden." : "Enclosed area will be kept.")+" Click Preview when finished.");
             });
             scanViewer.addHandler("canvas-double-click",e=>{if(tracing)e.preventDefaultAction=true;});
+            // New drawing layers use the same saved wall outline and openings.
+            scanViewer.world.addHandler("add-item", e => cropItem(e.item));
+            scanViewer.navigator.world.addHandler("add-item", e => cropItem(e.item));
             scanViewer.addHandler("animation",drawGuide); scanViewer.addHandler("resize",drawGuide);
             scanViewer.addHandler("open",()=>{resetDraft(); summary();});
             scanViewer.navigator.addHandler("open",()=>{
